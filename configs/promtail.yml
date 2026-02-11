@@ -1,0 +1,60 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: dockerlogs
+    docker_sd_configs:
+      - host: "unix:///var/run/docker.sock"
+        refresh_interval: 5s
+        # filter to only scrape running containers if desired
+        # filters:
+        #   - name: status
+        #     values: [running]
+
+    relabel_configs:
+      # 1. Capture the Docker Compose Project
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: "project"
+
+      # 2. Capture the Docker Compose Service as 'service' AND 'app'
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "service"
+      
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "app"
+
+      # 3. Capture the Container Name (without slash)
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container"
+
+      # 4. Fallback: If service is empty, use extracted container name
+      - source_labels: ["service", "container"]
+        separator: ";"
+        regex: ";(.*)"
+        target_label: "service"
+        replacement: "$1"
+      
+      - source_labels: ["app", "container"]
+        separator: ";"
+        regex: ";(.*)"
+        target_label: "app"
+        replacement: "$1"
+
+      # 5. Overwrite the 'job' label with {project}-{service}
+      #    This matches the specific Grafana dashboard query: label_values(job)
+      - source_labels: ["project", "service"]
+        separator: "-"
+        target_label: "job"
+
+      # 6. Create the path to the log file based on the container ID
+      - source_labels: ["__meta_docker_container_id"]
+        target_label: "__path__"
+        replacement: "/var/lib/docker/containers/$1/*.log"

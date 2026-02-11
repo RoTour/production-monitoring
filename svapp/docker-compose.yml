@@ -1,0 +1,18 @@
+services:
+  svapp:
+    image: svapp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - monitoring
+    deploy:
+      replicas: 2
+      labels:
+        - 'traefik.enable=true'
+        - 'traefik.http.routers.svapp.rule=Host(`app.localhost`)'
+        - 'traefik.http.services.svapp.loadbalancer.server.port=3000'
+
+networks:
+  monitoring:
+    external: true
