@@ -1,0 +1,92 @@
+services:
+  ###################
+  # ----Metrics---- #
+  ###################
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - monitoring
+
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "0.50"
+    #       memory: 50M
+    #       pids: 1
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - default
+      - monitoring
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "0.50"
+    #       memory: 50M
+    #       pids: 1
+
+  #################
+  # ---Logging--- #
+  #################
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./configs/promtail.yml:/etc/promtail/config.yml
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitoring
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./configs/loki.yml:/etc/loki/config.yml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/config.yml
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./configs/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    environment:
+      - GF_SERVER_DOMAIN=monitor.localhost
+      - GF_SERVER_ROOT_URL=http://monitor.localhost
+
+    networks:
+      - monitoring
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.grafana.rule=Host(`grafana2.rotour.dev`)"
+        - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+volumes:
+  loki_data:
+  grafana_data:
+  prometheus_data:
+
+networks:
+  monitoring:
+    external: true
